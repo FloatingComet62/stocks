@@ -130,12 +130,12 @@ impl Market {
             return Ok(None);
         }
 
-        return Ok(Some(
+        Ok(Some(
             offer_idxs
                 .iter()
                 .map(|idx| target_offers[*idx].clone())
                 .collect(),
-        ));
+        ))
     }
 
     pub fn convert_trade_offer_and_todo_transaction_to_transaction(
@@ -218,7 +218,9 @@ impl Market {
         market_value.current_price = avg;
         market_value.overall_movement_end = *recent_transactions.last().unwrap();
 
-        self.recent_transactions.clear();
+        self.recent_transactions
+            .entry(company_id)
+            .and_modify(|transactions| transactions.clear());
     }
 
     pub fn tick_failures(
@@ -227,8 +229,8 @@ impl Market {
         expired_options: &mut HashMap<u64, Vec<FailedOffer<StockOption>>>,
     ) {
         let house_tick_data = self.house.tick();
-        expired_trades.extend(house_tick_data.0);
-        expired_options.extend(house_tick_data.1);
+        expired_trades.extend(house_tick_data.failed_trade_offer);
+        expired_options.extend(house_tick_data.failed_option_offer);
     }
 }
 

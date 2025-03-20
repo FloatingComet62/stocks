@@ -6,13 +6,15 @@ use std::{
 };
 
 #[allow(dead_code)]
-#[derive(PartialEq, PartialOrd)]
+#[derive(PartialEq, PartialOrd, Default)]
 enum LogLevel {
+    #[default]
     Info = 0,
     Warn = 1,
     Error = 2,
 }
 
+#[derive(Default)]
 pub struct Log {
     log_level: LogLevel,
     output_file: Option<String>,
@@ -27,14 +29,14 @@ pub enum FileSaveError {
 
 impl Log {
     #[cfg(debug_assertions)]
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             log_level: LogLevel::Info,
             output_file: Some("debug.log".to_string()),
         }
     }
     #[cfg(not(debug_assertions))]
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             log_level: LogLevel::Warn,
             output_file: None,
@@ -161,7 +163,7 @@ impl Log {
         process::exit(1);
     }
 
-    fn to_file(&self, data: &String) -> Result<(), FileSaveError> {
+    pub fn to_file(&self, data: &String) -> Result<(), FileSaveError> {
         let output_file = self.output_file.clone().unwrap();
         match OpenOptions::new().append(true).open(&output_file) {
             Ok(mut file) => {

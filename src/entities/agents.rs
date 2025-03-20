@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 fn combine(a: u64, b: u64) -> u128 {
-    (a as u128) << 64 | b as u128
+    ((a as u128) << 64) | b as u128
 }
 
 fn get_first(a: u128) -> u64 {
@@ -81,12 +81,11 @@ impl Holdings {
     }
     pub fn get(&self, agent_id: u64, company_id: u64) -> u64 {
         self.0
-            .get(&combine(agent_id, company_id))
-            .map(|share_count| *share_count)
+            .get(&combine(agent_id, company_id)).copied()
             .unwrap_or(0)
     }
     pub fn get_u128(&self, id: u128) -> u64 {
-        self.0.get(&id).map(|share_count| *share_count).unwrap_or(0)
+        self.0.get(&id).copied().unwrap_or(0)
     }
     pub fn push_from_txn(&mut self, target_agent_id: u64, transaction: &Transaction) {
         self.0
@@ -336,7 +335,7 @@ impl Agents {
         for agent_id in 0..self.num_of_agents {
             let (company_id, action) = news_dependent_company_id_probability_distribution
                 [rng.gen_range(0..news_dependent_company_id_probability_distribution.len())];
-            self.preferences.0[agent_id as usize].add(&vec![(company_id, action)]);
+            self.preferences.0[agent_id as usize].add(&[(company_id, action)]);
         }
     }
     pub fn rand_introduce_new_agents(
@@ -369,20 +368,16 @@ impl Agents {
         if new_balances.len() != num_of_agents_to_introduce as usize {
             return Err(SimulationError::NoData);
         }
-        self.balances.0.append(new_balances);
-        self.preferences
-            .0
-            .extend((0..num_of_agents_to_introduce).map(|_| Timeline::new()));
         for i in self.num_of_agents..(self.num_of_agents + num_of_agents_to_introduce) {
             let mut pref_clone = preferences.clone();
             let agent_preferences = move |company_id: u64| pref_clone(i, company_id);
             self.set_preferences_for_all_companies(agent_preferences, i, num_of_companies)?;
         }
-        self.num_of_agents += num_of_agents_to_introduce;
+        let _ = self.create_agents(num_of_agents_to_introduce, new_balances);
         Ok(())
     }
-    pub fn create_agents(&mut self, num_of_agents: u64) -> Vec<u64> {
-        self.balances.0.extend((0..num_of_agents).map(|_| 0.0));
+    pub fn create_agents(&mut self, num_of_agents: u64, new_balances: &mut Vec<f64>) -> Vec<u64> {
+        self.balances.0.append(new_balances);
         self.preferences
             .0
             .extend((0..num_of_agents).map(|_| Timeline::new()));

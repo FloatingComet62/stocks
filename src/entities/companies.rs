@@ -148,9 +148,6 @@ impl Lots {
         if self.is_blank() {
             return Ok(());
         }
-        if self.lot_size == 0 {
-            return Ok(());
-        }
         agents.balances.add(
             agent_id,
             -(self.strike_price * (self.lot_size * number_of_lots) as f64),
@@ -164,9 +161,6 @@ impl Lots {
     }
     pub fn add_bet(&mut self, agent_id: u64, number_of_lots: u64) {
         if self.is_blank() || number_of_lots == 0 {
-            return;
-        }
-        if self.lot_size == 0 {
             return;
         }
         self.bets
@@ -216,7 +210,7 @@ impl Lots {
         self.total_num_of_bets -= number_of_lots;
     }
     pub fn get_bet(&self, agent_id: u64) -> u64 {
-        self.bets.get(&agent_id).unwrap_or(&0).clone()
+        *self.bets.get(&agent_id).unwrap_or(&0)
     }
     pub fn distribute_shares(&mut self, company_id: u64, agents: &mut Agents) {
         if self.is_blank() {
@@ -241,6 +235,7 @@ impl Lots {
     }
     pub fn compress_lot_size(&mut self, compress_ratio: f64) -> u64 {
         let new_lot_size = (self.lot_size as f64 * compress_ratio).round() as u64;
+        println!("{:?}", compress_ratio);
 
         let refund_difference = self.lot_size - new_lot_size;
         self.lot_size = new_lot_size;

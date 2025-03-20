@@ -1,13 +1,14 @@
 // Main thing to do now is for agents to hold long for certain companies
 
-use rand::{thread_rng, Rng};
-use rand_distr::{Normal, Distribution};
+use rand::{random, Rng};
+use rand_chacha::rand_core::SeedableRng;
+use rand_chacha::ChaCha8Rng;
+use rand_distr::{Distribution, Normal};
 use std::collections::HashMap;
 use std::sync::{
-    Arc,
     atomic::{AtomicBool, Ordering},
+    Arc,
 };
-use ctrlc;
 use stocks::{
     entities::{
         agents::{Agent, Agents},
@@ -16,7 +17,7 @@ use stocks::{
     load, log,
     logger::Log,
     market::Market,
-    max, save,
+    max,
     trade_house::{FailedOffer, StockOption, Trade},
     transaction::TodoTransaction,
     SimulationError, AGENTS_DATA_FILENAME, COMPANIES_DATA_FILENAME, MIN_STRIKE_PRICE,
@@ -37,80 +38,60 @@ fn rand_spend_portion_wealth(rng: &mut impl Rng) -> f64 {
 }
 
 fn main() {
-    let mut rng = thread_rng();
+    let seed = random();
+    if let Err(e) = Log::new().to_file(&format!("Seed: {}\n", seed)) {
+        log!(warn "Failed to save seed to the file\n{:?}", e)
+    }
+
+    let mut rng = ChaCha8Rng::seed_from_u64(seed);
     log!(info "Loading local file data");
     let agent_file = load::<Vec<Agent>>(AGENTS_DATA_FILENAME);
     let company_file = load::<Vec<Company>>(COMPANIES_DATA_FILENAME);
 
-    let mut flag_give_random_stocks_to_random_agents = false;
-
-    if let Err(ref e) = agent_file {
-        log!(warn "Agents file not found\n{:?}", e);
-        flag_give_random_stocks_to_random_agents = true;
-    } else {
-        log!(info "Loaded agents");
-    }
-    if let Err(ref e) = company_file {
-        log!(warn "Company file not found\n{:?}", e);
-    } else {
-        log!(info "Loaded companies");
-    }
-
-    if company_file.is_ok() {
-    } else {
-    }
-
-    let mut companies = if let Ok(company_data) = company_file {
-        Companies::load(company_data.as_slice())
-    } else {
-        Companies::rand(NUM_OF_COMPANIES as usize, 0, &mut rng)
+    let mut companies = match company_file {
+        Ok(company_data) => {
+            log!(info "Loaded companies");
+            Companies::load(company_data.as_slice())
+        }
+        Err(ref e) => {
+            log!(warn "Company file not found\n{:?}", e);
+            Companies::rand(NUM_OF_COMPANIES as usize, 0, &mut rng)
+        }
     };
 
-    let mut agents = if let Ok(agent_data) = agent_file {
-        Agents::load(agent_data.as_slice())
-    } else {
-        let mut a = Agents::new();
-        let rng1 = thread_rng();
-        let rng2 = thread_rng();
-        a.rand_introduce_new_agents(rng1, rng2, NUM_OF_AGENTS, companies.num_of_companies)
-            .unwrap();
-        a
+    let mut agents = match agent_file {
+        Ok(agent_data) => {
+            log!(info "Loaded agents");
+            Agents::load(agent_data.as_slice())
+        }
+        Err(ref e) => {
+            log!(warn "Agents file not found\n{:?}", e);
+            let mut a = Agents::new();
+            let rng1 = ChaCha8Rng::seed_from_u64(seed + 1);
+            let rng2 = ChaCha8Rng::seed_from_u64(seed + 2);
+            let rng3 = ChaCha8Rng::seed_from_u64(seed + 3);
+            a.rand_introduce_new_agents(rng1, rng2, NUM_OF_AGENTS, companies.num_of_companies)
+                .unwrap();
+            a.rand_give_preferences(rng3, companies.num_of_companies)
+                .unwrap();
+            a
+        }
     };
-
-    /*
-    let len = agents.balances.0.len() as f64;
-    println!("{:?}", agents.balances.0.clone().into_iter().max_by(|a, b| a.partial_cmp(b).unwrap()));
-    println!("{:?}", agents.balances.0.clone().into_iter().min_by(|a, b| a.partial_cmp(b).unwrap()));
-    println!("{:?}", agents.balances.0.into_iter().sum::<f64>() / len);
-
-    std::process::exit(0);
-    */
 
     let mut market = Market::new();
-
-    if flag_give_random_stocks_to_random_agents {
-        let rng1 = thread_rng();
-        agents
-            .rand_give_preferences(rng1, companies.num_of_companies)
-            .unwrap();
-    }
 
     let mut expired_trades: HashMap<u64, Vec<FailedOffer<Trade>>> = HashMap::new();
     let mut expired_options: HashMap<u64, Vec<FailedOffer<StockOption>>> = HashMap::new();
 
     let mut todo_transactions: Vec<TodoTransaction> = Vec::new();
 
-    let trade = Trade::new(10);
-    agents
-        .try_failed_offers(&mut rng, &mut todo_transactions, &trade)
-        .unwrap();
-
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let mut i: i128 = 0;
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
-    }).expect("Error setting Ctrl-C handler");
+    })
+    .expect("Error setting Ctrl-C handler");
     while running.load(Ordering::SeqCst) {
         i += 1;
         agents.try_offers.clear();
@@ -151,7 +132,8 @@ fn main() {
                 .unwrap_or(failable_value);
             companies.market_values[company_id as usize].current_price = current_price;
             let strike_price = max(MIN_STRIKE_PRICE, current_price + rng.gen_range(-10.0..10.0));
-            let want_to_spend = agents.balances.get(agent_id).unwrap() * rand_spend_portion_wealth(&mut rng);
+            let want_to_spend =
+                agents.balances.get(agent_id).unwrap() * rand_spend_portion_wealth(&mut rng);
             let rough_amount_of_stocks = (want_to_spend / strike_price).floor() as u64;
             if rough_amount_of_stocks == 0 {
                 // bruh, just don't trade anything
@@ -167,7 +149,7 @@ fn main() {
             });
         }
         let news_probability_distribution = &companies.generate_preferences_from_news(&mut rng);
-        agents.rand_give_preferences_from_news(&mut rng, &news_probability_distribution);
+        agents.rand_give_preferences_from_news(&mut rng, news_probability_distribution);
         let Err(e) = market.rand_do_trade(
             &mut rng,
             &mut agents,
@@ -193,6 +175,7 @@ fn main() {
     log!(info "Exiting at index {:?}", i);
     log!(info "Saving data");
 
+    /*
     if let Err(e) = save(agents.save().unwrap(), AGENTS_DATA_FILENAME) {
         log!(warn "Failed to save agents data\n{:?}", e);
     } else {
@@ -203,5 +186,6 @@ fn main() {
     } else {
         log!(info "Saved companies");
     }
+    */
     log!(info "Exit");
 }

@@ -10,6 +10,11 @@ pub struct TradeHouse {
     option_offers: HashMap<u64, Offers<StockOption>>,
 }
 
+pub struct TickData {
+    pub failed_trade_offer: HashMap<u64, Vec<FailedOffer<Trade>>>,
+    pub failed_option_offer: HashMap<u64, Vec<FailedOffer<StockOption>>>,
+}
+
 /// All the offers of the certain company
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Offers<T>
@@ -92,6 +97,10 @@ impl TradeHouse {
     pub fn get_mut_trade_offers(&mut self, company_id: u64) -> &mut Offers<Trade> {
         self.trade_offers.entry(company_id).or_default()
     }
+    pub fn get_trade_relative_buy_offers(&self, company_id: u64) -> Option<f64> {
+        let trade_offers = self.trade_offers.get(&company_id)?;
+        Some(trade_offers.buyer_offers.len() as f64 / trade_offers.seller_offers.len() as f64)
+    }
 
     pub fn get_mut_option_offers(&mut self, company_id: u64) -> &mut Offers<StockOption> {
         self.option_offers.entry(company_id).or_default()
@@ -172,7 +181,7 @@ impl TradeHouse {
 
     /// Returns the indices of trade_house.trade_offers which matches the strike_price
     pub fn get_appropriate_buyer_trade_offer(
-        &mut self,
+        &self,
         company_id: u64,
         strike_price: f64,
         acceptable_strike_price_deviation: f64,
@@ -195,7 +204,7 @@ impl TradeHouse {
 
     /// Returns the indices of trade_house.trade_offers which matches the strike_price
     pub fn get_appropriate_seller_trade_offer(
-        &mut self,
+        &self,
         company_id: u64,
         strike_price: f64,
         acceptable_strike_price_deviation: f64,
@@ -217,7 +226,7 @@ impl TradeHouse {
     }
 
     pub fn get_appropriate_option_offer(
-        &mut self,
+        &self,
         company_id: u64,
         strike_price: f64,
         acceptable_strike_price_deviation: f64,
@@ -239,7 +248,7 @@ impl TradeHouse {
 
     /// Returns the indices of trade_house.option_offers which matches the strike_price
     pub fn get_appropriate_buyer_option_offer(
-        &mut self,
+        &self,
         company_id: u64,
         strike_price: f64,
         acceptable_strike_price_deviation: f64,
@@ -262,7 +271,7 @@ impl TradeHouse {
 
     /// Returns the indices of trade_house.option_offers which matches the strike_price
     pub fn get_appropriate_seller_option_offer(
-        &mut self,
+        &self,
         company_id: u64,
         strike_price: f64,
         acceptable_strike_price_deviation: f64,
@@ -285,10 +294,7 @@ impl TradeHouse {
 
     pub fn tick(
         &mut self,
-    ) -> (
-        HashMap<u64, Vec<FailedOffer<Trade>>>,
-        HashMap<u64, Vec<FailedOffer<StockOption>>>,
-    ) {
+    ) -> TickData {
         let mut trade_offers = HashMap::new();
         let mut option_offers = HashMap::new();
         for (company_id, offers) in self.trade_offers.iter_mut() {
@@ -303,7 +309,10 @@ impl TradeHouse {
                 option_offers.insert(*company_id, expired_options);
             }
         }
-        (trade_offers, option_offers)
+        TickData {
+            failed_trade_offer: trade_offers,
+            failed_option_offer: option_offers
+        }
     }
 }
 

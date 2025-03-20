@@ -34,7 +34,10 @@ fn getting_added_to_offers_list() {
 
 #[test]
 fn offer_resolving() {
-    let mut agents = Agents::load(&[Agent::new(0, 100.0, &[], &[]), Agent::new(1, 0.0, &[(0, 100)], &[])]);
+    let mut agents = Agents::load(&[
+        Agent::new(0, 100.0, &[], &[]),
+        Agent::new(1, 0.0, &[(0, 100)], &[]),
+    ]);
     let mut companies = Companies::load(&[Company::new(0, 100.0, 0.0, 0.0, (0.0, 0, 0))]);
     let mut market = Market::new();
     market
@@ -74,7 +77,7 @@ fn offer_resolving() {
 
     // to put the trade up, the agent needs to give that money
     assert_eq!(agents.balances.get(0).unwrap(), 0.0);
-    assert_eq!(agents.balances.get(1).unwrap(), 50.0); 
+    assert_eq!(agents.balances.get(1).unwrap(), 50.0);
 
     assert_eq!(agents.holdings.get(0, 0), 50);
     assert_eq!(agents.holdings.get(1, 0), 50);
